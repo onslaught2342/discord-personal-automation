@@ -1,0 +1,52 @@
+# GitHub Actions-based Discord Bot for Vercel, Cloudflare, and Netlify
+
+name: Discord Bot Status Check
+
+on:
+  schedule:
+    - cron: "0 * * * *" # Runs every hour
+  workflow_dispatch: # Allows manual execution
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Get Vercel Deployments for All Projects
+        run: |
+          curl -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" \
+               -X GET "https://api.vercel.com/v6/deployments" > vercel.json
+
+      - name: Get Cloudflare Zones
+        run: |
+          curl -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+               -H "Content-Type: application/json" \
+               -X GET "https://api.cloudflare.com/client/v4/zones" > cloudflare.json
+
+      - name: Get Netlify Sites Info
+        run: |
+          curl -H "Authorization: Bearer ${{ secrets.NETLIFY_TOKEN }}" \
+               -X GET "https://api.netlify.com/api/v1/sites" > netlify.json
+
+      - name: Format Status Message
+        run: |
+          echo "**Project Status Update:**" > status.txt
+          echo "- **Vercel Deployments:**" >> status.txt
+          jq -r '.deployments[] | "  - " + .name + " (" + .state + ") - " + .url' vercel.json >> status.txt
+          echo "- **Cloudflare Zones:**" >> status.txt
+          jq -r '.result[] | "  - " + .name + " (" + .status + ")"' cloudflare.json >> status.txt
+          echo "- **Netlify Sites:**" >> status.txt
+          jq -r '.[] | "  - " + .name + " (" + .state + ") - " + .url' netlify.json >> status.txt
+
+      - name: Send Message to Discord
+        run: |
+          curl -H "Content-Type: application/json" \
+               -X POST "https://discord.com/api/webhooks/${{ secrets.DISCORD_WEBHOOK }}" \
+               -d "{\"content\": \"$(cat status.txt)\"}"
+
+      - name: Remove Temporary Files
+        run: |
+          rm -f vercel.json cloudflare.json netlify.json
