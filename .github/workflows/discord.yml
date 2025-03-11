@@ -32,7 +32,7 @@ jobs:
           echo "NETLIFY_TOKEN=${{ secrets.NETLIFY_TOKEN }}" >> $GITHUB_ENV
           echo "DISCORD_WEBHOOK=${{ secrets.DISCORD_WEBHOOK }}" >> $GITHUB_ENV
 
-      - name: Get Vercel Deployments
+      - name: Get Vercel Deployments for All Projects
         run: |
           curl --silent --fail -H "Authorization: Bearer $VERCEL_TOKEN" \
                -X GET "https://api.vercel.com/v6/deployments" > vercel.json || echo "[]" > vercel.json
@@ -43,7 +43,7 @@ jobs:
                -H "Content-Type: application/json" \
                -X GET "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/" > cloudflare.json || echo "{\"result\":[]}" > cloudflare.json
 
-      - name: Get Netlify Sites
+      - name: Get Netlify Sites Info
         run: |
           curl --silent --fail -H "Authorization: Bearer $NETLIFY_TOKEN" \
                -X GET "https://api.netlify.com/api/v1/sites" > netlify.json || echo "[]" > netlify.json
@@ -54,24 +54,31 @@ jobs:
           
           echo "- **Vercel Deployments:**" >> status.txt
           if [[ $(jq '.deployments | length' vercel.json) -gt 0 ]]; then
-            jq -r '.deployments[] | "  - **Name:** " + (.name // "Unknown") + "\n    **Status:** " + (.state // "Unknown") + "\n    **URL:** " + (.url // "No URL") + "\n    **Last Deployed:** " + (.createdAt // "Unknown")' vercel.json >> status.txt
+            jq -r '.deployments[] | "  - **Project:** " + (.name // "Unknown") + 
+                   "\n    **Status:** " + (.state // "Unknown") + 
+                   "\n    **Latest Deploy URL:** " + (.url // "No URL")' vercel.json >> status.txt
           else
             echo "  - No deployments found" >> status.txt
           fi
-
+          
           echo "- **Cloudflare Pages Projects:**" >> status.txt
           if [[ $(jq '.result | length' cloudflare.json) -gt 0 ]]; then
-            jq -r '.result[] | "  - **Project:** " + (.name // "Unknown") + "\n    **Status:** " + (.status // "Unknown") + "\n    **Last Deployed:** " + (.latest_deployment.created_on // "Unknown")' cloudflare.json >> status.txt
+            jq -r '.result[] | "  - **Project:** " + (.name // "Unknown") + 
+                   "\n    **Status:** " + (.status // "Unknown") + 
+                   "\n    **Last Deployed:** " + (.latest_deployment.created_on | tostring // "Unknown")' cloudflare.json >> status.txt
           else
             echo "  - No projects found" >> status.txt
           fi
-
+          
           echo "- **Netlify Sites:**" >> status.txt
           if [[ $(jq '. | length' netlify.json) -gt 0 ]]; then
-            jq -r '.[] | "  - **Site:** " + (.name // "Unknown") + "\n    **State:** " + (.state // "Unknown") + "\n    **Latest Deploy URL:** " + (.url // "No URL") + "\n    **Last Published:** " + (.published_at // "Unknown")' netlify.json >> status.txt
+            jq -r '.[] | "  - **Site:** " + (.name // "Unknown") + 
+                   "\n    **State:** " + (.state // "Unknown") + 
+                   "\n    **Latest Deploy URL:** " + (.url // "No URL") + 
+                   "\n    **Last Published:** " + (.published_at | tostring // "Unknown")' netlify.json >> status.txt
           else
             echo "  - No sites found" >> status.txt
           fi
 
-      - name: Send Message to Discord
+      - name: Send Message to Discord using Python
         run: python send_discord_message.py
