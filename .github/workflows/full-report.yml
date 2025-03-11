@@ -92,10 +92,11 @@ jobs:
 
       - name: Format Deployment History
         run: |
-          echo "**Deployment Summary:**" > report.md
-          echo "**Vercel Deployments:** $(jq '. | length' vercel.json)" >> report.md
-          echo "**Cloudflare Deployments:** $(jq '. | length' cloudflare_deployments.json)" >> report.md
-          echo "**Netlify Deployments:** $(jq '. | length' netlify_deployments.json)" >> report.md
+            echo "**Deployment Summary:**" > status.txt
+            echo "**Vercel Deployments:** $(jq '. | length' vercel.json)" >> status.txt
+            echo "**Cloudflare Deployments:** $(jq '. | length' cloudflare_deployments.json)" >> status.txt
+            echo "**Netlify Deployments:** $(jq '. | length' netlify_deployments.json)" >> status.txt
+  
 
       - name: Send Message to Discord using Python
         run: python send_discord_message.py
