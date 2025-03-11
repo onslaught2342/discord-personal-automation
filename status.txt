@@ -1,0 +1,10 @@
+🚀 **Project Status Update** 🚀
+
+=== Cloudflare ===
+Base URL: https://dash.cloudflare.com/
+
+=== Netlify ===
+Base URL: https://app.netlify.com/
+
+=== Vercel ===
+Base URL: https://vercel.com/
