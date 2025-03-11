@@ -38,8 +38,9 @@ def format_status():
         message += "\n\n- **Cloudflare Pages Projects:**"
         for project in cloudflare_data:
             name = project.get("name", "Unknown")
-            status = project.get("status", "Unknown").capitalize()
-            last_deployed = project.get("latest_deployment", {}).get("created_on", "Unknown")
+            latest_deployment = project.get("latest_deployment", {})
+            status = latest_deployment.get("status", "Unknown").capitalize()
+            last_deployed = latest_deployment.get("created_on", "Unknown")
             message += f"\n  - **Project:** {name}\n    **Status:** {status}\n    **Last Deployed:** {last_deployed}"
     else:
         message += "\n- **Cloudflare Pages Projects:** No projects found"
@@ -53,8 +54,10 @@ def format_status():
         for site in netlify_data:
             name = site.get("name", "Unknown")
             state = site.get("state", "Unknown").capitalize()
-            url = f"https://{site.get('url', 'No URL')}"
-            last_published = site.get("published_at", "Unknown")
+            url = site.get("url", "No URL")
+            if not url.startswith("http://") and not url.startswith("https://"):
+                url = f"https://{url}"  # Ensure URL is properly formatted
+            last_published = site.get("published_at", site.get("updated_at", "Unknown"))
             ping = ping_url(url)
             message += f"\n  - **Site:** {name}\n    **State:** {state}\n    **Latest Deploy URL:** {url}\n    **Last Published:** {last_published}\n    **Ping Status:** {ping}"
     else:
