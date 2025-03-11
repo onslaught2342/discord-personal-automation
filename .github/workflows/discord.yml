@@ -39,7 +39,7 @@ jobs:
                -X GET "https://api.netlify.com/api/v1/sites" > netlify.json || echo "[]" > netlify.json
   
       - name: Format Status Report
-        run: python format_status.py
+        run: python format.py
   
       - name: Send Message to Discord
         run: python send_discord_message.py
