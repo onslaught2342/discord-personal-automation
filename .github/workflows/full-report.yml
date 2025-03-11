@@ -56,7 +56,7 @@ jobs:
           while true; do
             RESPONSE=$(curl --silent --fail -H "Authorization: Bearer $CLOUDFLARE_TOKEN" \
                   -H "Content-Type: application/json" \
-                  "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/blog-onslaught/deployments?page=$PAGE")
+                  "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/?page=$PAGE")
             if [ $? -ne 0 ]; then
               echo "Failed to fetch Cloudflare deployments"; break
             fi
