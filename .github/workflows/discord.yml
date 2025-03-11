@@ -26,55 +26,21 @@ jobs:
           echo "NETLIFY_TOKEN=${{ secrets.NETLIFY_TOKEN }}" >> $GITHUB_ENV
           echo "DISCORD_WEBHOOK=${{ secrets.DISCORD_WEBHOOK }}" >> $GITHUB_ENV
 
-      - name: Get Vercel Deployments
+
+
+      - name: Fetch Deployment Data
         run: |
-          curl --silent --fail -H "Authorization: Bearer $VERCEL_TOKEN" -X GET "https://api.vercel.com/v6/deployments" > vercel.json || echo "[]" > vercel.json
-
-      - name: Get Cloudflare Pages Projects
-        run: |
-          curl --silent --fail -H "Authorization: Bearer $CLOUDFLARE_TOKEN" -H "Content-Type: application/json" -X GET "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/" > cloudflare.json || echo "{"result":[]}" > cloudflare.json
-
-      - name: Get Netlify Sites
-        run: |
-          curl --silent --fail -H "Authorization: Bearer $NETLIFY_TOKEN" -X GET "https://api.netlify.com/api/v1/sites" > netlify.json || echo "[]" > netlify.json
-
-      - name: Format Status Message
-        run: |
-          echo "**Project Status Update:**" > status.txt
-          
-          echo "- **Vercel Deployments:**" >> status.txt
-          if [[ $(jq '.deployments | length' vercel.json) -gt 0 ]]; then
-            jq -r '.deployments[] | "  - **Project:** " + (.name // "Unknown") + "\n    **Status:** " + (.state // "Unknown") + "\n    **Latest Deploy URL:** https://" + (.url // "No URL")' vercel.json >> status.txt
-          else
-            echo "  - No deployments found" >> status.txt
-          fi
-
-          echo "- **Cloudflare Pages Projects:**" >> status.txt
-          if [[ $(jq '.result | length' cloudflare.json) -gt 0 ]]; then
-            jq -r '.result[] | "  - **Project:** " + (.name // "Unknown") + "\n    **Status:** " + (.status // "Unknown") + "\n    **Last Deployed:** " + (.latest_deployment.created_on // "Unknown")' cloudflare.json >> status.txt
-          else
-            echo "  - No projects found" >> status.txt
-          fi
-          
-          echo "- **Netlify Sites:**" >> status.txt
-          if [[ $(jq '. | length' netlify.json) -gt 0 ]]; then
-            jq -r '.[] | "  - **Site:** " + (.name // "Unknown") + "\n    **State:** " + (.state // "Unknown") + "\n    **Latest Deploy URL:** https://" + (.url // "No URL") + "\n    **Last Published:** " + (.published_at // "Unknown")' netlify.json >> status.txt
-          else
-            echo "  - No sites found" >> status.txt
-          fi
-
-      - name: Check Deployment Status
-        run: |
-          while read -r line; do
-            if [[ $line == *"**Latest Deploy URL:**"* ]]; then
-              url=$(echo $line | awk '{print $NF}')
-              if curl --output /dev/null --silent --head --fail "$url"; then
-                echo "    **Ping Status:** ✅ Reachable" >> status.txt
-              else
-                echo "    **Ping Status:** ❌ Unreachable" >> status.txt
-              fi
-            fi
-          done < status.txt
-
-      - name: Send Message to Discord using Python
+          curl --silent --fail -H "Authorization: Bearer $VERCEL_TOKEN" \
+               -X GET "https://api.vercel.com/v6/deployments" > vercel.json || echo "[]" > vercel.json
+          curl --silent --fail -H "Authorization: Bearer $CLOUDFLARE_TOKEN" \
+               -H "Content-Type: application/json" \
+               -X GET "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/" > cloudflare.json || echo "{\"result\":[]}" > cloudflare.json
+          curl --silent --fail -H "Authorization: Bearer $NETLIFY_TOKEN" \
+               -X GET "https://api.netlify.com/api/v1/sites" > netlify.json || echo "[]" > netlify.json
+  
+      - name: Format Status Report
+        run: python format_status.py
+  
+      - name: Send Message to Discord
         run: python send_discord_message.py
+  
