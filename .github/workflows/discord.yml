@@ -76,6 +76,5 @@ jobs:
             fi
           done < status.txt
 
-      - name: Send Message to Discord
-        run: |
-          curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$(cat status.txt)\"}" "$DISCORD_WEBHOOK"
+      - name: Send Message to Discord using Python
+        run: python send_discord_message.py
