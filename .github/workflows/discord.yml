@@ -1,11 +1,11 @@
-# GitHub Actions-based Discord Bot for Vercel, Cloudflare, and Netlify
-
 name: Discord Bot Status Check
 
 on:
   schedule:
-    - cron: "0 * * * *" # Runs every hour
+    - cron: "0 */3 * * *" # Runs every 3 hours
   workflow_dispatch: # Allows manual execution
+  push:
+    branches: [ "main" ]
 
 jobs:
   run-bot:
@@ -15,38 +15,57 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
+      - name: Install Dependencies
+        run: sudo apt-get install -y jq
+
+      - name: Set Environment Variables
+        run: |
+          echo "VERCEL_TOKEN=${{ secrets.VERCEL_TOKEN }}" >> $GITHUB_ENV
+          echo "CLOUDFLARE_TOKEN=${{ secrets.CLOUDFLARE_TOKEN }}" >> $GITHUB_ENV
+          echo "NETLIFY_TOKEN=${{ secrets.NETLIFY_TOKEN }}" >> $GITHUB_ENV
+          echo "DISCORD_WEBHOOK=${{ secrets.DISCORD_WEBHOOK }}" >> $GITHUB_ENV
+
       - name: Get Vercel Deployments for All Projects
         run: |
-          curl -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" \
-               -X GET "https://api.vercel.com/v6/deployments" > vercel.json
+          curl --silent --fail -H "Authorization: Bearer $VERCEL_TOKEN" \
+               -X GET "https://api.vercel.com/v6/deployments" > vercel.json || echo "[]" > vercel.json
 
       - name: Get Cloudflare Zones
         run: |
-          curl -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_TOKEN }}" \
+          curl --silent --fail -H "Authorization: Bearer $CLOUDFLARE_TOKEN" \
                -H "Content-Type: application/json" \
-               -X GET "https://api.cloudflare.com/client/v4/zones" > cloudflare.json
+               -X GET "https://api.cloudflare.com/client/v4/zones" > cloudflare.json || echo "{\"result\":[]}" > cloudflare.json
 
       - name: Get Netlify Sites Info
         run: |
-          curl -H "Authorization: Bearer ${{ secrets.NETLIFY_TOKEN }}" \
-               -X GET "https://api.netlify.com/api/v1/sites" > netlify.json
+          curl --silent --fail -H "Authorization: Bearer $NETLIFY_TOKEN" \
+               -X GET "https://api.netlify.com/api/v1/sites" > netlify.json || echo "[]" > netlify.json
 
       - name: Format Status Message
         run: |
           echo "**Project Status Update:**" > status.txt
+          
           echo "- **Vercel Deployments:**" >> status.txt
-          jq -r '.deployments[] | "  - " + .name + " (" + .state + ") - " + .url' vercel.json >> status.txt
+          if [[ $(jq '.deployments | length' vercel.json) -gt 0 ]]; then
+            jq -r '.deployments[] | "  - " + (.name // "Unknown") + " (" + (.state // "Unknown") + ") - " + (.url // "No URL")' vercel.json >> status.txt
+          else
+            echo "  - No deployments found" >> status.txt
+          fi
+
           echo "- **Cloudflare Zones:**" >> status.txt
-          jq -r '.result[] | "  - " + .name + " (" + .status + ")"' cloudflare.json >> status.txt
+          if [[ $(jq '.result | length' cloudflare.json) -gt 0 ]]; then
+            jq -r '.result[] | "  - " + (.name // "Unknown") + " (" + (.status // "Unknown") + ")"' cloudflare.json >> status.txt
+          else
+            echo "  - No zones found" >> status.txt
+          fi
+
           echo "- **Netlify Sites:**" >> status.txt
-          jq -r '.[] | "  - " + .name + " (" + .state + ") - " + .url' netlify.json >> status.txt
+          if [[ $(jq '. | length' netlify.json) -gt 0 ]]; then
+            jq -r '.[] | "  - " + (.name // "Unknown") + " (" + (.state // "Unknown") + ") - " + (.url // "No URL")' netlify.json >> status.txt
+          else
+            echo "  - No sites found" >> status.txt
+          fi
 
-      - name: Send Message to Discord
-        run: |
-          curl -H "Content-Type: application/json" \
-               -X POST "https://discord.com/api/webhooks/${{ secrets.DISCORD_WEBHOOK }}" \
-               -d "{\"content\": \"$(cat status.txt)\"}"
 
-      - name: Remove Temporary Files
-        run: |
-          rm -f vercel.json cloudflare.json netlify.json
+      - name: Send Message to Discord using Python
+        run: python send_discord_message.py

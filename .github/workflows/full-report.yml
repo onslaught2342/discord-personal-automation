@@ -1,0 +1,96 @@
+name: Discord Bot Full Deployment History Check
+
+on:
+  schedule:
+    - cron: "0 */3 * * *" # Runs every 3 hours
+  workflow_dispatch: # Allows manual execution
+  push:
+    branches: [ "main" ]
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install Dependencies
+        run: sudo apt-get install -y jq
+
+      - name: Set Environment Variables
+        run: |
+          echo "VERCEL_TOKEN=${{ secrets.VERCEL_TOKEN }}" >> $GITHUB_ENV
+          echo "CLOUDFLARE_TOKEN=${{ secrets.CLOUDFLARE_TOKEN }}" >> $GITHUB_ENV
+          echo "CLOUDFLARE_ACCOUNT_ID=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" >> $GITHUB_ENV
+          echo "NETLIFY_TOKEN=${{ secrets.NETLIFY_TOKEN }}" >> $GITHUB_ENV
+          echo "DISCORD_WEBHOOK=${{ secrets.DISCORD_WEBHOOK_FULL }}" >> $GITHUB_ENV
+
+      - name: Get Full Vercel Deployment History (Paginated)
+        run: |
+          VERCEL_DEPLOYMENTS="[]"
+          NEXT=""
+          while true; do
+            RESPONSE=$(curl --silent --fail -H "Authorization: Bearer $VERCEL_TOKEN" \
+                  "https://api.vercel.com/v6/deployments?limit=100&${NEXT}")
+            if [ $? -ne 0 ]; then
+              echo "Failed to fetch Vercel deployments"; break
+            fi
+            VERCEL_DEPLOYMENTS=$(echo $VERCEL_DEPLOYMENTS $RESPONSE | jq -s '.[0] + .[1].deployments')
+            NEXT=$(echo $RESPONSE | jq -r '.pagination.next' 2>/dev/null)
+            [ "$NEXT" == "null" ] && break
+          done
+          echo $VERCEL_DEPLOYMENTS | jq '.' > vercel.json
+
+      - name: Get Full Cloudflare Deployment History (Paginated)
+        run: |
+          CLOUDFLARE_DEPLOYMENTS="[]"
+          PAGE=1
+          while true; do
+            RESPONSE=$(curl --silent --fail -H "Authorization: Bearer $CLOUDFLARE_TOKEN" \
+                  -H "Content-Type: application/json" \
+                  "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/blog-onslaught/deployments?page=$PAGE")
+            if [ $? -ne 0 ]; then
+              echo "Failed to fetch Cloudflare deployments"; break
+            fi
+            DATA=$(echo $RESPONSE | jq '.result')
+            [ "$(echo $DATA | jq 'length')" -eq 0 ] && break
+            CLOUDFLARE_DEPLOYMENTS=$(echo $CLOUDFLARE_DEPLOYMENTS $DATA | jq -s '.[0] + .[1]')
+            PAGE=$((PAGE + 1))
+          done
+          echo $CLOUDFLARE_DEPLOYMENTS | jq '.' > cloudflare_deployments.json
+
+      - name: Get Full Netlify Deployment History (Paginated)
+        run: |
+          NETLIFY_SITES=$(curl --silent --fail -H "Authorization: Bearer $NETLIFY_TOKEN" \
+                  "https://api.netlify.com/api/v1/sites")
+          echo $NETLIFY_SITES | jq '.' > netlify_sites.json
+
+          NETLIFY_DEPLOYMENTS="[]"
+          for SITE_ID in $(echo $NETLIFY_SITES | jq -r '.[].id'); do
+            PAGE=1
+            while true; do
+              RESPONSE=$(curl --silent --fail -H "Authorization: Bearer $NETLIFY_TOKEN" \
+                    "https://api.netlify.com/api/v1/sites/$SITE_ID/deploys?page=$PAGE")
+              if [ $? -ne 0 ]; then
+                echo "Failed to fetch deployments for site $SITE_ID"; break
+              fi
+              DATA=$(echo $RESPONSE | jq '.')
+              [ "$(echo $DATA | jq 'length')" -eq 0 ] && break
+              NETLIFY_DEPLOYMENTS=$(echo $NETLIFY_DEPLOYMENTS $DATA | jq -s '.[0] + .[1]')
+              PAGE=$((PAGE + 1))
+            done
+          done
+          echo $NETLIFY_DEPLOYMENTS | jq '.' > netlify_deployments.json
+
+      - name: Format Deployment History
+        run: |
+          echo "**Deployment Summary:**" > report.md
+          echo "**Vercel Deployments:** $(jq '. | length' vercel.json)" >> report.md
+          echo "**Cloudflare Deployments:** $(jq '. | length' cloudflare_deployments.json)" >> report.md
+          echo "**Netlify Deployments:** $(jq '. | length' netlify_deployments.json)" >> report.md
+
+      - name: Send Message to Discord using Python
+        run: python send_discord_message.py
+  
+
